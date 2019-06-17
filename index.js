@@ -3,10 +3,12 @@
 var accountSid = 'AC2731625cd4d1b8355cfb34879ae76849';
 var authToken = 'be5775af06ad2f718b2c3d286866b8ff';   // Your Auth Token from www.twilio.com/console
 
-var twilio = require('twilio');
-var client = new twilio(accountSid, authToken);
+
+var twilioPackage = require('twilio');
+var twilio = new twilioPackage(accountSid, authToken);
 
 // FIREBASE 
+
 // The Firebase Cloud Functions
 const functions = require('firebase-functions');
 
@@ -14,11 +16,10 @@ const functions = require('firebase-functions');
 const admin = require('firebase-admin');
 admin.initializeApp();
 
-
 // Firebase db setup
 var db = admin.firestore();
 
-// documents in db
+// Specify collections within db
 var users = db.collection('Users');
 var jobs = db.collection('Jobs');
 
@@ -26,23 +27,30 @@ var jobs = db.collection('Jobs');
 // find users with matching job types 
 // text these users 
 
+// This is the Firestore listener
+
 exports.newJob = functions.firestore
     .document('Jobs/{jobId}')
     .onCreate((job, context) => {
     
+    // New data added to db
     const data = job.data() 
+    
+    // New unique jobId created randomly when new db entry is created
     const jobId = context.params.jobId;
 
-    // find candidate matches
+    // iterate users 
+    // find job type matches
+    // return array of user's phone numbers
     
     return findJobTypeMatches(data)
     
     // add candidates to job db
     // text candidates 
     
-    .then( function(candidates) {
-        console.log("FINAL CANDIDATES", candidates)
-        return storeAndTextJobCandidates(jobId, candidates, data)
+    .then( function(phoneNumbers) {
+
+        return storeAndTextJobCandidates(jobId, phoneNumbers, data)
 
     })
     
@@ -63,140 +71,75 @@ exports.newJob = functions.firestore
 // find users with matching job types 
 
 async function findJobTypeMatches(data) {
-    
-    // how many extra workers should be added to ensure sufficient choices in next step 
-    
-    const workersMultiplier = 2
-    var candidates = [];
-    var remainder = 0 
 
     // variables from new job posting 
     
-    const jobType = data.jobType;
-    const numWorkers = data.numWorkers * workersMultiplier;
+    const jobType = data.type;
+    const numWorkers = data.reqWorkers;
     
     // get users 
     
     const userCollection = await users.get()
     
-    // find job type matches
+    // find job type matches and return array of phone numbers
     
     var matches = []
     
     userCollection.forEach( user => { 
-        console.log(user.data().jobTypes)
+        
+        // if user has job type matching specified job type 
+        
         if (user.data().jobTypes.includes(jobType)) {
+            
+            // push user phone number to matches array 
+            
             matches.push(user.data().phone)
-        }});
+        }
+        
+    });
     
-    console.log(matches)
- 
-//    if (matches.length >= numWorkers) {
-//        matches = matches.splice(numWorkers, (matches.length - numWorkers))
-//    } 
-    
+    // return user matches array
+        
     return matches
         
 }
 
-async function storeAndTextJobCandidates(jobId, candidates, data) {
+// Store phone numbers of job type matches and then text them description
+
+async function storeAndTextJobCandidates(jobId, phoneNumbers, data) {
     
-    await jobs.doc(jobId).update({'candidates':candidates})
-    console.log("DATA", data)
+    // update job db with phone numbers of matches
+    
+    await jobs.doc(jobId).update({'candidates':phoneNumbers})
+    
+    // text matches 
+
     await text(candidates, data)
+    
 }
 
-// needed to do this because of scope issues 
-
-function userLoop(userIds) {
-    return userIds.map( (userId) => {
-        
-        return users.doc(userId).get()
-
-    })
-}
+// TEXT ARRAY OF USERS 
 
 async function text(numbers, data) {
     
-//    const users = await Promise.all(userLoop(candidates));
-//    
-//    console.log(users);
-//
-//    const numbers = users.map( (user) => {
-//        return user.data().phone
-//    })
-    
-    console.log(numbers);
-    console.log("data.description", data.description)
+    // return an array of promises made up of twilio client requests 
 
     await Promise.all(textLoop(numbers, data.description));
     
 }
 
-function textLoop(numbers, body) {
+// return promise when phone number is texted 
+
+function textLoop(numbers, description) {
     
-    console.log("BODY", body)
     return numbers.map( (number) => {
         
-        return client.messages.create({
-                body: body,
+        return twilio.messages.create({
+                body: description,  // job description
                 to: number,  // Text this number
                 from: '+12138175993' // From a valid Twilio number
         }) 
         .then((message) => console.log(message.sid));
     })
-    
-}
-
-function checkRemainder(remainder, ratingCategory, jobType) {
-    
-    if (remainder > 0) {
-        
-        // find more matches 
-        
-        const matches = findJobTypeMatches(ratingCategory, jobType);
-        
-        // calculate remaining matches to be made or excess matches to be removed
-        
-        const difference = matches.length - remainder
-        
-        // remove excess matches or return remainder of matches needed 
-        
-        // this remainder being zero business is ugly - REFACTOR 
-        return differenceConditional(matches, difference, 0)
-        
-    } else {
-        
-        // remainder is equal to 0 and so is difference 
-        // this could be more elegant - REFACTOR 
-        
-        return differenceConditional([], 0, 0) 
-        
-    }
-}
-
-function differenceConditional(matches, difference, remainder) {
-    
-    if (difference !== 0) {
-        
-        if (difference > 0) {
-            
-            // remove difference number of elements randomly from unratedDifference array 
-            
-            for (i = 1; i <= difference; i++) {
-                matches.splice(Math.floor(Math.random() * (difference - 1)), 1) 
-            }
-                        
-        } else {
-            
-            // add difference to star5Difference then get difference from star rating 4
-            
-            remainder += Math.abs(difference)
-    
-        }
-                
-    }
-    
-    return {'matches':matches, 'remainder':remainder}
     
 }
