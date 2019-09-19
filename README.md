@@ -1,6 +1,6 @@
 # work2day
 
-![Work2Day Logo](https://octodex.github.com/images/yaktocat.png)
+![Work2Day Logo](https://github.com/jsmellz/work2day/blob/master/Group%402x.png)
 
 work2day cloud endpoint
 
