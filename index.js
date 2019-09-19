@@ -1,7 +1,7 @@
 //Twilio Auth
 
-var accountSid = 'AC2731625cd4d1b8355cfb34879ae76849';
-var authToken = 'be5775af06ad2f718b2c3d286866b8ff';   // Your Auth Token from www.twilio.com/console
+var accountSid = 'Sid';
+var authToken = 'token';   // Your Auth Token from www.twilio.com/console
 
 
 var twilioPackage = require('twilio');
